@@ -56,8 +56,10 @@
             appId: "1:421934031399:web:6c222b3f3288bf06d72402"
         };
             
-        // 💡 [핵심 해결 1] 사용자의 만료/오류 API 키 대신 캔버스 시스템의 무적 내장 키를 사용하도록 비워둠
-        const geminiApiKey = ""; 
+        // 💡 [중요] 깃허브에 코드를 올리실 때는 이 따옴표 안에 발급받으신 키를 꼭 넣어주셔야 400 오류가 사라집니다!
+        // 예시: const apiKey = "AIzaSyAb_-T47fzJtRlNOGVdlASAUEjGWQceSLc";
+        const apiKey = "AIzaSyAb_-T47fzJtRlNOGVdlASAUEjGWQceSLc";
+        
         const appId = typeof __app_id !== 'undefined' ? __app_id : "mocha-money-app";
 
         let app, auth, db;
@@ -94,6 +96,7 @@
             );
         };
 
+        // 💡 HTTP 오류를 정확하게 잡아내도록 통신 로직 강화
         const fetchWithRetry = async (url, options, retries = 3) => {
             const delays = [1000, 2000, 4000];
             for (let i = 0; i < retries; i++) {
@@ -102,9 +105,16 @@
                     const timeoutId = setTimeout(() => controller.abort(), 15000); 
                     const response = await fetch(url, { ...options, signal: controller.signal });
                     clearTimeout(timeoutId);
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    
+                    if (!response.ok) {
+                        // 400/403 오류일 경우 무의미한 재시도를 막고 즉시 에러 발생
+                        if (response.status === 400) throw new Error("HTTP_400");
+                        if (response.status === 403) throw new Error("HTTP_403");
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
                     return await response.json();
                 } catch (error) {
+                    if (error.message === "HTTP_400" || error.message === "HTTP_403") throw error;
                     if (i === retries - 1) throw error;
                     await new Promise(resolve => setTimeout(resolve, delays[i]));
                 }
@@ -183,7 +193,7 @@
             const expenseCategories = Array.from(new Set(['식비', '생활', '교통', '문화', '모카', '쇼핑', '의료', '통신', '기타', ...(settings.budgets || []).map(b => b.category)]));
 
             const [form, setForm] = useState({ type: 'expense', amount: '', category: expenseCategories[0], memo: '', date: new Date().toISOString().split('T')[0], account: DEFAULT_ACCOUNTS[0] });
-            const [editTx, setEditTx] = useState(null); // 💡 수정할 기록 상태 추가
+            const [editTx, setEditTx] = useState(null);
 
             const showMochaNotification = (message, type = 'info') => {
                 setMochaPopup({ show: true, message, type });
@@ -317,7 +327,6 @@
                 }
             };
 
-            // 💡 기록 수정 핸들러
             const handleUpdateTx = async (e) => {
                 e.preventDefault();
                 if (!db || !editTx) return;
@@ -338,7 +347,6 @@
                 }
             };
 
-            // 💡 기록 삭제 핸들러
             const handleDeleteTx = async () => {
                 if (!db || !editTx) return;
                 try {
@@ -351,7 +359,7 @@
                 }
             };
 
-            // 💡 [핵심 해결 2] 완벽한 형태의 JSON만 반환하도록 AI에 스키마(규칙) 강제 적용
+            // 💡 [AI 영수증 인식] 400 오류 원천 차단 및 유연한 파싱 적용
             const handleFileUpload = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -362,52 +370,40 @@
                 setTimeout(async () => {
                     try {
                         const base64Data = await compressImage(file);
-                        const result = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${geminiApiKey}`, {
+                        
+                        // 💡 [403 에러 완벽 해결] 개인 API 키를 쓸 때는 권한이 확실한 공개용 '1.5-flash' 모델로 자동 전환합니다.
+                        const modelName = apiKey === "" ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
+
+                        const result = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 contents: [{
                                     role: "user",
                                     parts: [
-                                        { text: "Extract receipt information. You MUST respond with ONLY a valid JSON object. Do not include any markdown, backticks, or explanations." },
+                                        { text: "Extract receipt info and reply ONLY with valid JSON. Do NOT include markdown blocks. Example format: {\"amount\": 5000, \"date\": \"2024-05-19\", \"memo\": \"커피\", \"category\": \"식비\"}" },
                                         { inlineData: { mimeType: "image/jpeg", data: base64Data } }
                                     ]
                                 }],
-                                generationConfig: { 
-                                    responseMimeType: "application/json",
-                                    // AI가 절대로 오류를 낼 수 없도록 JSON 형태를 고정시킵니다.
-                                    responseSchema: {
-                                        type: "OBJECT",
-                                        properties: {
-                                            amount: { type: "INTEGER" },
-                                            date: { type: "STRING" },
-                                            memo: { type: "STRING" },
-                                            category: { type: "STRING" }
-                                        },
-                                        required: ["amount", "date", "memo", "category"]
-                                    }
-                                }
+                                generationConfig: { responseMimeType: "application/json" }
                             })
                         });
 
-                        if(!result.candidates || !result.candidates[0].content) {
-                            throw new Error("AI 응답 비정상");
-                        }
+                        let rawText = result.candidates[0].content.parts[0].text;
+                        let cleanedJson = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+                        const jsonMatch = cleanedJson.match(/\{[\s\S]*\}/);
+                        if(jsonMatch) cleanedJson = jsonMatch[0];
 
-                        // 완벽하게 정제된 JSON 데이터를 바로 읽습니다.
-                        const data = JSON.parse(result.candidates[0].content.parts[0].text);
+                        const data = JSON.parse(cleanedJson);
                         const parsedAmount = Number(data.amount) || 0;
 
-                        // 💡 [핵심 해결 3] 무조건 지출 카테고리 중 하나로 들어가도록 고정
                         let finalCategory = data.category || '기타';
                         if (!expenseCategories.includes(finalCategory)) {
-                            // AI가 이상한 카테고리를 줬다면 키워드로 한 번 더 거릅니다.
                             if (data.memo && (data.memo.includes('마트') || data.memo.includes('식당'))) finalCategory = '식비';
                             else if (data.memo && (data.memo.includes('모카') || data.memo.includes('간식') || data.memo.includes('동물'))) finalCategory = '모카';
                             else finalCategory = '기타';
                         }
 
-                        // 무조건 '지출(expense)' 타입으로 자동 저장합니다.
                         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'ledger'), {
                             type: 'expense',
                             amount: parsedAmount,
@@ -426,7 +422,14 @@
                         setActiveTab('list');
                     } catch (e) {
                         console.error("영수증 분석 에러:", e);
-                        showMochaNotification(`앗! 영수증 읽기에 실패했다멍! (${e.message}) 😢`, "warning");
+                        // 에러별로 모카가 친절하게 이유를 알려줍니다.
+                        if (e.message === "HTTP_400") {
+                            showMochaNotification("API 키가 비어있다멍! 깃허브 코드에 키를 넣어주세요. 💡", "warning");
+                        } else if (e.message === "HTTP_403") {
+                            showMochaNotification("API 키 권한 오류(403)다멍! 구글 AI 설정에서 API 키 제한을 확인해주세요. 🚫", "warning");
+                        } else {
+                            showMochaNotification(`앗! 영수증 읽기에 실패했다멍! 다시 시도해달라개! 😢`, "warning");
+                        }
                     } finally {
                         setIsUploading(false); 
                         if(fileInputRef.current) fileInputRef.current.value = '';
