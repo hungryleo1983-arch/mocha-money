@@ -31,7 +31,13 @@
         /* 모바일 터치 및 스크롤 최적화 */
         .touch-action-none { touch-action: none; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
-        input, select, textarea { font-size: 16px !important; }
+        input, select, textarea { font-size: 16px !important; color-scheme: dark; }
+        
+        /* 애니메이션 정의 (페이지 안뜨는 문제 해결 핵심) */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes zoomIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        .animate-zoom-in { animation: zoomIn 0.3s ease-out forwards; }
         
         .animate-bounce-gentle { animation: bounce 2s ease-in-out infinite; }
         @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
@@ -62,6 +68,7 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
         import { getFirestore, collection, onSnapshot, addDoc, doc, setDoc, updateDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
+        // --- 환경 설정 ---
         const firebaseConfig = {
             apiKey: "AIzaSyBve1WGTCzLUdNJRmeaOhlOrBnBg7yMhgk",
             authDomain: "mocha-money.firebaseapp.com",
@@ -131,7 +138,7 @@
             const [mochaPopup, setMochaPopup] = useState({ show: false, message: '', type: 'info' });
             
             const incomeCategories = ['급여', '보너스', '부수입', '이자/배당', '환급금', '기타'];
-            const expenseCategories = useMemo(() => Array.from(new Set(['식비', '생활', '교통', '문화', '모카', '쇼핑', '의료', '통신', '기타', ...settings.budgets.map(b => b.category)])), [settings.budgets]);
+            const expenseCategories = useMemo(() => Array.from(new Set(['식비', '생활', '교통', '문화', '모카', '쇼핑', '의료', '통신', '기타', ...(settings.budgets || []).map(b => b.category)])), [settings.budgets]);
 
             const [form, setForm] = useState({ type: 'expense', amount: '', category: '식비', memo: '', date: new Date().toISOString().split('T')[0], account: '' });
 
@@ -181,6 +188,26 @@
 
                 return () => { unsubTx(); unsubSet(); unsubFav(); };
             }, [user, appId]);
+
+            const autoFrequentItems = useMemo(() => {
+                const counts = {};
+                (transactions || []).forEach(t => {
+                    const key = `${t.type}|${t.memo}|${t.amount}|${t.category}`;
+                    counts[key] = (counts[key] || 0) + 1;
+                });
+                return Object.entries(counts)
+                    .filter(([_, count]) => count >= 10)
+                    .map(([key]) => {
+                        const [type, memo, amount, category] = key.split('|');
+                        return { type, memo, amount: Number(amount), category };
+                    });
+            }, [transactions]);
+
+            const combinedFavorites = useMemo(() => {
+                const auto = (autoFrequentItems || []).map(item => ({ ...item, isAuto: true }));
+                const manual = (favorites || []).map(item => ({ ...item, isAuto: false }));
+                return [...manual, ...auto];
+            }, [autoFrequentItems, favorites]);
 
             const chartData = useMemo(() => {
                 const data = [];
@@ -255,9 +282,9 @@
 
                     <main className="flex-1 p-5 space-y-7 overflow-y-auto pb-32 hide-scrollbar bg-gradient-to-br from-slate-900 via-slate-800 to-teal-950/20 text-left">
                         {activeTab === 'dashboard' && (
-                            <div className="space-y-7 animate-in fade-in duration-500">
+                            <div className="space-y-7 animate-fade-in">
                                 
-                                {/* 💡 [UI 개선] 시드머니 목표 카드 (강아지가 글자를 안 가리게 수정) */}
+                                {/* 시드머니 목표 카드 */}
                                 <div className="goal-gradient rounded-[40px] p-8 shadow-2xl relative overflow-hidden border border-white/20">
                                     <div className="flex justify-between items-start mb-8">
                                         <div className="flex-1">
@@ -270,17 +297,14 @@
                                         <SpriteIcon size={64} className="border-white/20 shadow-2xl" />
                                     </div>
                                     
-                                    {/* 💡 게이지 섹션: 아이콘 간섭 방지를 위해 마진 추가 */}
                                     <div className="relative pt-6 pb-2">
                                         <div className="w-full bg-black/30 rounded-full h-5 gauge-container p-1">
-                                            <div className="bg-gradient-to-r from-yellow-500 to-yellow-300 h-full rounded-full relative transition-all duration-1000 gauge-fill shadow-[0_0_20px_rgba(234,179,8,0.4)]" style={{width: `${goalProgress}%`}}>
-                                                {/* 🐶 강아지 위치를 게이지 위로 정확히 고정 */}
+                                            <div className="bg-gradient-to-r from-yellow-500 to-yellow-300 h-full rounded-full relative transition-all duration-1000 gauge-fill" style={{width: `${goalProgress}%`}}>
                                                 <div className="absolute -right-4 -top-8 text-3xl animate-bounce-gentle">🐶</div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* 💡 목표 수치 텍스트: 충분한 간격(mt-4) 확보 */}
                                     <div className="flex justify-between items-center mt-5 text-[14px] font-black text-teal-50/90 tracking-wide uppercase">
                                         <span className="bg-black/20 px-4 py-1 rounded-full border border-white/5">{new Intl.NumberFormat('ko-KR').format(settings.goal.amount)}원 목표</span>
                                         <span className="bg-white/15 px-4 py-1 rounded-full text-white shadow-sm border border-white/10">{goalProgress.toFixed(1)}% 달성</span>
@@ -352,7 +376,7 @@
                         )}
 
                         {activeTab === 'add' && (
-                            <div className="space-y-7 animate-in zoom-in-95 duration-300 pt-2">
+                            <div className="space-y-7 animate-zoom-in pt-2">
                                 <h3 className="font-black text-3xl mb-4 text-slate-100">기록하기 ✍️</h3>
                                 {combinedFavorites.length > 0 && (
                                     <div className="space-y-4">
@@ -404,7 +428,7 @@
                         )}
 
                         {activeTab === 'list' && (
-                            <div className="space-y-5 animate-in slide-in-from-right-4 duration-300 pt-2 text-left">
+                            <div className="space-y-5 animate-fade-in pt-2 text-left">
                                 <h3 className="font-black text-3xl mb-6 text-slate-100">최근 기록장 📑</h3>
                                 {transactions.length === 0 ? <div className="text-center py-20 text-slate-600 font-black">아직 기록된 내용이 없다멍!</div> : transactions.map(t => (
                                     <div key={t.id} onClick={() => setEditTx(t)} className="glass p-6 rounded-[32px] shadow-lg flex justify-between items-center active:scale-95 transition-transform group cursor-pointer border-slate-700/50">
@@ -422,7 +446,7 @@
 
                     {/* 자산 관리 모달 */}
                     {isAssetPageOpen && (
-                        <div className="fixed inset-0 z-[120] bg-slate-900 overflow-y-auto p-6 pt-12 animate-in slide-in-from-bottom duration-300 text-slate-100 text-left">
+                        <div className="fixed inset-0 z-[120] bg-slate-900 overflow-y-auto p-6 pt-12 animate-fade-in text-slate-100 text-left">
                             <button onClick={() => setIsAssetPageOpen(false)} className="mb-6 flex items-center gap-2 text-teal-400 font-black py-2 active:scale-95"><LucideIcon name="arrow-left" className="w-5 h-5"/> 돌아가기</button>
                             <h2 className="text-3xl font-black mb-8">내 자산 리스트 💰</h2>
                             <div className="flex gap-2 mb-9">
@@ -469,7 +493,7 @@
 
                     {/* 예산 관리 모달 */}
                     {isBudgetManageOpen && (
-                        <div className="fixed inset-0 z-[140] bg-slate-900/95 backdrop-blur-sm flex items-center justify-center p-4 pt-safe animate-in fade-in">
+                        <div className="fixed inset-0 z-[140] bg-slate-900/95 backdrop-blur-sm flex items-center justify-center p-4 pt-safe animate-fade-in">
                             <div className="bg-slate-800 border border-slate-700 p-8 rounded-[48px] shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col text-left">
                                 <div className="flex justify-between items-center mb-8 shrink-0">
                                     <h3 className="font-black text-2xl flex items-center gap-2 text-slate-100">🛡️ 예산 방어 설정</h3>
@@ -493,14 +517,14 @@
                                         <LucideIcon name="plus" className="w-6 h-6" /> 새 예산 항목 추가
                                     </button>
                                 </div>
-                                <button onClick={handleSaveBudgets} className="w-full bg-teal-500 text-white font-black text-xl py-5.5 h-18 rounded-[36px] mt-6 shadow-2xl active:scale-95 transition-transform uppercase tracking-widest tracking-widest">저장하기 🐾</button>
+                                <button onClick={handleSaveBudgets} className="w-full bg-teal-500 text-white font-black text-xl py-5.5 h-18 rounded-[36px] mt-6 shadow-2xl active:scale-95 transition-transform uppercase tracking-widest">저장하기 🐾</button>
                             </div>
                         </div>
                     )}
 
                     {/* 기록 수정 모달 */}
                     {editTx && (
-                        <div className="fixed inset-0 z-[110] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                        <div className="fixed inset-0 z-[110] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
                             <div className="bg-slate-800 border border-slate-700 p-8 rounded-[48px] shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto flex flex-col text-left text-slate-100">
                                 <div className="flex justify-between items-center mb-8"><h3 className="font-black text-2xl tracking-tight">기록 수정 ✍️</h3><button onClick={() => setEditTx(null)} className="text-slate-400 p-2"><LucideIcon name="x" className="w-8 h-8" /></button></div>
                                 <form onSubmit={async (e) => {
@@ -547,7 +571,7 @@
 
                     {/* 즐겨찾기 편집 모달 */}
                     {isFavManageOpen && (
-                        <div className="fixed inset-0 z-[130] bg-slate-900 overflow-y-auto p-6 pt-12 animate-in slide-in-from-bottom duration-300 text-left text-slate-100">
+                        <div className="fixed inset-0 z-[130] bg-slate-900 overflow-y-auto p-6 pt-12 animate-fade-in text-left text-slate-100">
                             <button onClick={() => setIsFavManageOpen(false)} className="mb-8 flex items-center gap-2 text-teal-400 font-black py-2"><LucideIcon name="arrow-left" className="w-6 h-6" /> 돌아가기</button>
                             <h2 className="text-3xl font-black mb-10 tracking-tight">자주 쓰는 내역 💖</h2>
                             <div className="space-y-5">
@@ -562,7 +586,7 @@
                     )}
 
                     {/* 목표 설정 모달 */}
-                    {isGoalModalOpen && <div className="fixed inset-0 z-[150] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in text-left"><div className="bg-slate-800 border border-slate-700 p-9 rounded-[48px] shadow-2xl w-full max-w-sm text-slate-100"><h3 className="font-black text-2xl mb-8 tracking-tight">🎯 목표 수정하기</h3><form onSubmit={(e) => { e.preventDefault(); setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...settings, goal: settings.goal }, { merge: true }); setIsGoalModalOpen(false); showMochaNotification("새로운 각오 완료! 🔥"); }} className="space-y-7"><div><label className="text-xs font-black text-slate-500 block mb-2.5 uppercase tracking-widest text-left">목표 내용</label><input type="text" value={settings.goal.title} onChange={e => setSettings({...settings, goal: {...settings.goal, title: e.target.value}})} className="w-full p-4.5 h-16 rounded-3xl bg-slate-900 border border-slate-600 text-white outline-none focus:border-teal-500 text-lg font-bold" required /></div><div><label className="text-xs font-black text-slate-500 block mb-2.5 uppercase tracking-widest text-left">목표 금액</label><input type="number" value={settings.goal.amount} onChange={e => setSettings({...settings, goal: {...settings.goal, amount: Number(e.target.value)}})} className="w-full p-4.5 h-16 rounded-3xl bg-slate-900 border border-slate-600 text-white outline-none font-black text-2xl" required /></div><div className="flex gap-4 pt-4"><button type="button" onClick={() => setIsGoalModalOpen(false)} className="flex-1 py-5 bg-slate-700 rounded-3xl font-black active:scale-95 transition-all text-slate-300 shadow-md">취소</button><button type="submit" className="flex-[2] py-5 bg-teal-500 text-white rounded-3xl font-black text-lg shadow-2xl active:scale-95 transition-all">저장하기</button></div></form></div></div>}
+                    {isGoalModalOpen && <div className="fixed inset-0 z-[150] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in text-left"><div className="bg-slate-800 border border-slate-700 p-9 rounded-[48px] shadow-2xl w-full max-w-sm text-slate-100"><h3 className="font-black text-2xl mb-8 tracking-tight">🎯 목표 수정하기</h3><form onSubmit={(e) => { e.preventDefault(); setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...settings, goal: settings.goal }, { merge: true }); setIsGoalModalOpen(false); showMochaNotification("새로운 각오 완료! 🔥"); }} className="space-y-7"><div><label className="text-xs font-black text-slate-500 block mb-2.5 uppercase tracking-widest text-left">목표 내용</label><input type="text" value={settings.goal.title} onChange={e => setSettings({...settings, goal: {...settings.goal, title: e.target.value}})} className="w-full p-4.5 h-16 rounded-3xl bg-slate-900 border border-slate-600 text-white outline-none focus:border-teal-500 text-lg font-bold" required /></div><div><label className="text-xs font-black text-slate-500 block mb-2.5 uppercase tracking-widest text-left">목표 금액</label><input type="number" value={settings.goal.amount} onChange={e => setSettings({...settings, goal: {...settings.goal, amount: Number(e.target.value)}})} className="w-full p-4.5 h-16 rounded-3xl bg-slate-900 border border-slate-600 text-white outline-none font-black text-2xl" required /></div><div className="flex gap-4 pt-4"><button type="button" onClick={() => setIsGoalModalOpen(false)} className="flex-1 py-5 bg-slate-700 rounded-3xl font-black active:scale-95 transition-all text-slate-300 shadow-md">취소</button><button type="submit" className="flex-[2] py-5 bg-teal-500 text-white rounded-3xl font-black text-lg shadow-2xl active:scale-95 transition-all">저장하기</button></div></form></div></div>}
 
                     {/* 팝업 알림 */}
                     {mochaPopup.show && (
