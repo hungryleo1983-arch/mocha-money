@@ -112,7 +112,7 @@
                     }
                     return await response.json();
                 } catch (error) {
-                    if (error.status === 400 || error.status === 403) throw error; // 권한 에러는 재시도 안 함
+                    if (error.status === 400 || error.status === 403 || error.status === 404) throw error; // 권한/오류는 재시도 안 함
                     if (i === retries - 1) throw error;
                     await new Promise(resolve => setTimeout(resolve, delays[i]));
                 }
@@ -373,7 +373,8 @@
                             throw new Error("HTTP_400"); // 강제로 400 에러 처리로 넘김
                         }
                         
-                        const modelName = "gemini-1.5-flash"; // 가장 안정적이고 권한 오류 없는 모델 강제 고정
+                        // 💡 [404 에러 완벽 해결] 가장 최신의 안정적인 모델로 강제 고정! (이 부분이 수정되었습니다)
+                        const modelName = "gemini-2.5-flash-preview-09-2025"; 
 
                         const result = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
                             method: 'POST',
@@ -436,8 +437,8 @@
                         }
 
                         if (errorMessage === "HTTP_400") {
-                            setError(`[영수증 인식 실패] API 키가 비어있습니다. 깃허브에서 코드를 열어 apiKey 부분을 채워주세요.`);
-                            showMochaNotification(`API 키가 빠져있다멍! 상단 안내를 확인하라개! 💡`, "warning");
+                            setError(`[영수증 인식 실패] API 키가 비어있거나 잘못되었습니다. 깃허브 코드의 apiKey를 확인해주세요.`);
+                            showMochaNotification(`API 키를 다시 확인해달라멍! 💡`, "warning");
                         } else {
                             setError(`[영수증 자동 입력 실패] 원인: ${errorMessage}`);
                             showMochaNotification(`영수증 분석에 실패했다멍! 화면 상단의 에러 원인을 확인하라개! 😢`, "warning");
