@@ -151,6 +151,7 @@
                     { id: 3, category: '모카', amount: 150000, icon: '🐶' }
                 ], 
                 assetAccounts: ['메인 급여통장', '비상금 통장', '청약 저축', '주식/투자 계좌', '기타'], 
+                excludedFromGoal: [], // 💡 목표에서 제외할 통장 목록
                 goal: { title: "우리 가족 시드머니 1억!", amount: 100000000, deadline: "2026-12-31" } 
             });
 
@@ -237,7 +238,12 @@
             const maxChartVal = useMemo(() => Math.max(...chartData.flatMap(d => [d.income, d.expense]), 100000) * 1.1, [chartData]);
             const monthIncome = transactions.filter(t => t.type === 'income' && t.date?.startsWith(new Date().toISOString().slice(0, 7))).reduce((s, t) => s + (Number(t.amount)||0), 0);
             const monthExpense = transactions.filter(t => t.type === 'expense' && t.date?.startsWith(new Date().toISOString().slice(0, 7))).reduce((s, t) => s + (Number(t.amount)||0), 0);
-            const totalSavings = transactions.reduce((s, t) => s + (t.type === 'income' ? 1 : -1) * (Number(t.amount)||0), 0);
+            
+            // 💡 시드머니(목표 금액) 계산 시 '제외된 통장(excludedFromGoal)' 내역은 합산에서 뺌
+            const totalSavings = transactions
+                .filter(t => !(settings.excludedFromGoal || []).includes(t.account))
+                .reduce((s, t) => s + (t.type === 'income' ? 1 : -1) * (Number(t.amount)||0), 0);
+                
             const goalProgress = Math.min(100, Math.max(0, (totalSavings / (settings.goal.amount || 1)) * 100));
 
             const dDay = useMemo(() => {
@@ -292,7 +298,7 @@
                 showMochaNotification("방어 태세 완벽 구축! 🛡️");
             };
 
-            useEffect(() => { if (window.lucide) lucide.createIcons(); }, [activeTab, loading, isAssetPageOpen, isFavManageOpen, isGoalModalOpen, isBudgetManageOpen, editTx, chartData, editingAccount, editingBalanceAccount, budgetForm, isNavVisible]);
+            useEffect(() => { if (window.lucide) lucide.createIcons(); }, [activeTab, loading, isAssetPageOpen, isFavManageOpen, isGoalModalOpen, isBudgetManageOpen, editTx, chartData, editingAccount, editingBalanceAccount, budgetForm, isNavVisible, settings.excludedFromGoal]);
 
             if (loading) return (
                 <div className="flex flex-col items-center justify-center h-screen bg-slate-900 gap-6 text-teal-400 font-black">
@@ -414,7 +420,7 @@
                         )}
 
                         {activeTab === 'add' && (
-                            <div className="space-y-7 animate-zoom-in pt-2">
+                            <div className="space-y-7 animate-zoom-in pt-2 text-left">
                                 <h3 className="font-black text-3xl mb-4 text-slate-100">기록하기 ✍️</h3>
                                 {combinedFavorites.length > 0 && (
                                     <div className="space-y-4">
@@ -441,7 +447,6 @@
                                     </div>
                                     
                                     <div className="space-y-5">
-                                        {/* 💡 [수정] 통장 선택 칸 패딩 조정하여 겹침 방지 */}
                                         <div className="relative">
                                             <div className="absolute left-6 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none z-10"><LucideIcon name="wallet" className="w-5 h-5 text-teal-500" /></div>
                                             <select value={form.account} onChange={e => setForm({...form, account: e.target.value})} className="w-full pl-16 pr-10 py-5 h-16 rounded-3xl bg-slate-800 border border-slate-700 text-slate-100 outline-none focus:border-teal-500 transition-all font-bold text-left">
@@ -474,8 +479,7 @@
                                         </div>
                                     </div>
 
-                                    {/* 💡 저장하기 버튼 가림 방지 - 충분한 하단 공간 확보 */}
-                                    <div className="pt-4 pb-20">
+                                    <div className="pt-4 pb-10">
                                         <button type="submit" className="w-full py-6 h-18 bg-teal-500 text-white rounded-[40px] font-black text-xl shadow-[0_12px_24px_rgba(20,184,166,0.45)] active:scale-[0.97] transition-all flex items-center justify-center gap-3.5 tracking-wider">
                                             <LucideIcon name="save" className="w-6 h-6" /> 기록 저장하기 🐶
                                         </button>
@@ -489,7 +493,7 @@
                                 <h3 className="font-black text-3xl mb-6 text-slate-100">최근 기록장 📑</h3>
                                 {transactions.length === 0 ? <div className="text-center py-24 text-slate-600 font-black text-xl">기록이 없다멍!</div> : transactions.map(t => (
                                     <div key={t.id} onClick={() => setEditTx(t)} className="glass p-6 rounded-[32px] shadow-lg flex justify-between items-center active:scale-[0.98] transition-transform group cursor-pointer border-slate-700/50 text-left">
-                                        <div className="flex-1 pr-4">
+                                        <div className="flex-1 pr-4 text-left">
                                             <div className="flex items-center gap-2 mb-2"><p className="text-[11px] text-slate-500 font-black uppercase font-sans tracking-widest">{t.date}</p><span className="text-[10px] bg-slate-900/50 px-2.5 py-0.5 rounded-full text-slate-400 font-bold border border-white/5">{t.account}</span></div>
                                             <p className="font-bold text-slate-100 text-[20px] mb-2 leading-tight tracking-tight">{t.memo}</p>
                                             <span className="text-[11px] bg-teal-500/15 text-teal-400 px-3.5 py-1 rounded-xl font-black border border-teal-500/20">{t.category}</span>
@@ -506,7 +510,7 @@
                         {!isNavVisible && (
                             <button 
                                 onClick={() => setIsNavVisible(true)}
-                                className="pointer-events-auto absolute bottom-10 left-1/2 -translate-x-1/2 bg-slate-800/95 text-teal-400 px-8 py-3 rounded-full border border-teal-500/40 shadow-2xl flex items-center gap-2 animate-bounce-gentle font-black text-xs active:scale-95 transition-all"
+                                className="pointer-events-auto absolute bottom-10 left-1/2 -translate-x-1/2 bg-slate-800/95 text-teal-400 px-8 py-3 rounded-full border border-teal-500/40 shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex items-center gap-2 animate-bounce-gentle font-black text-xs active:scale-95 transition-all"
                             >
                                 <LucideIcon name="chevron-up" className="w-5 h-5" /> 메뉴 열기
                             </button>
@@ -524,7 +528,7 @@
                                 <LucideIcon name="layout-dashboard" className="w-7 h-7" />
                                 <span className="text-[11px] font-black tracking-tighter">홈 화면</span>
                             </button>
-                            <button onClick={() => setActiveTab('add')} className="relative -top-12 bg-gradient-to-tr from-teal-600 to-teal-400 w-20 h-20 rounded-full flex items-center justify-center border-5 border-slate-900 shadow-[0_15px_40px_rgba(20,184,166,0.6)] active:scale-90 transition-transform">
+                            <button onClick={() => setActiveTab('add')} className="relative -top-12 bg-gradient-to-tr from-teal-600 to-teal-400 w-20 h-20 rounded-full flex items-center justify-center border-5 border-slate-900 shadow-[0_15px_40px_rgba(20,184,166,0.5)] active:scale-90 transition-transform">
                                 <LucideIcon name="plus" className="text-white w-10 h-10" />
                             </button>
                             <button onClick={() => setActiveTab('list')} className={`flex flex-col items-center gap-1.5 w-20 py-3 rounded-3xl transition-all ${activeTab === 'list' ? 'text-teal-400 bg-teal-400/10 shadow-inner' : 'text-slate-500 active:text-slate-300'}`}>
@@ -540,7 +544,7 @@
                             <button onClick={() => setIsAssetPageOpen(false)} className="mb-6 flex items-center gap-2 text-teal-400 font-black py-2 active:scale-95"><LucideIcon name="arrow-left" className="w-5 h-5"/> 돌아가기</button>
                             <h2 className="text-3xl font-black mb-8 text-left">내 자산 리스트 💰</h2>
                             <div className="flex gap-2 mb-10 text-left">
-                                <input type="text" placeholder="새 통장 이름" value={newAccountName} onChange={e => setNewAccountName(e.target.value)} className="flex-1 p-5 h-16 rounded-3xl bg-slate-800 border border-slate-700 text-white outline-none focus:border-teal-500 font-bold" />
+                                <input type="text" placeholder="새 통장 이름" value={newAccountName} onChange={e => setNewAccountName(e.target.value)} className="flex-1 p-5 h-16 rounded-3xl bg-slate-800 border border-slate-700 text-white outline-none focus:border-teal-500 font-bold text-left" />
                                 <button onClick={() => {
                                     if (!newAccountName.trim() || settings.assetAccounts.includes(newAccountName.trim())) return;
                                     const updated = [...settings.assetAccounts, newAccountName.trim()];
@@ -556,48 +560,45 @@
                                                 <input type="text" value={editAccountName} onChange={e => setEditAccountName(e.target.value)} className="flex-1 p-4 rounded-2xl bg-slate-900 border border-teal-500 text-white outline-none font-bold text-left" autoFocus />
                                                 <button onClick={() => {
                                                     const updated = settings.assetAccounts.map(a => a === acc ? editAccountName.trim() : a);
-                                                    setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...settings, assetAccounts: updated }, { merge: true });
+                                                    const updatedExcluded = (settings.excludedFromGoal || []).map(a => a === acc ? editAccountName.trim() : a);
+                                                    setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...settings, assetAccounts: updated, excludedFromGoal: updatedExcluded }, { merge: true });
                                                     setEditingAccount(null);
-                                                }} className="bg-teal-500 text-white p-5 rounded-2xl shadow-lg text-left"><LucideIcon name="check" /></button>
-                                                <button onClick={() => setEditingAccount(null)} className="bg-slate-600 text-white p-5 rounded-2xl shadow-lg text-left"><LucideIcon name="x" /></button>
-                                            </div>
-                                        ) : editingBalanceAccount === acc ? (
-                                            <div className="flex gap-2 text-left">
-                                                <input type="number" value={editAccountBalance} onChange={e => setEditAccountBalance(e.target.value)} className="flex-1 p-4 rounded-2xl bg-slate-900 border border-teal-500 text-white outline-none font-bold text-left" autoFocus />
-                                                <button onClick={async () => {
-                                                    const currentBal = accountBalances[acc] || 0;
-                                                    const newBal = Number(editAccountBalance);
-                                                    if (newBal !== currentBal) {
-                                                        const diff = newBal - currentBal;
-                                                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'ledger'), {
-                                                            type: diff > 0 ? 'income' : 'expense',
-                                                            amount: Math.abs(diff),
-                                                            category: '기타',
-                                                            memo: '잔액 조정',
-                                                            date: new Date().toISOString().split('T')[0],
-                                                            account: acc,
-                                                            timestamp: new Date().toISOString(),
-                                                            uid: user.uid
-                                                        });
-                                                        showMochaNotification("통장 잔액이 수정되었다멍! 💰");
-                                                    }
-                                                    setEditingBalanceAccount(null);
-                                                }} className="bg-teal-500 text-white p-5 rounded-2xl shadow-lg text-left"><LucideIcon name="check" /></button>
-                                                <button onClick={() => setEditingBalanceAccount(null)} className="bg-slate-600 text-white p-5 rounded-2xl shadow-lg text-left"><LucideIcon name="x" /></button>
+                                                }} className="bg-teal-500 text-white p-5 rounded-2xl shadow-lg text-left text-left"><LucideIcon name="check" /></button>
                                             </div>
                                         ) : (
                                             <div className="text-left">
                                                 <div className="flex justify-between items-center text-left">
                                                     <div className="flex items-center gap-4 text-left">
-                                                        <div className="w-14 h-14 bg-slate-900 rounded-full flex items-center justify-center text-3xl shadow-inner border border-white/5 text-left">🏦</div>
-                                                        <span className="font-black text-xl tracking-tight text-left">{acc}</span>
+                                                        <div className="w-14 h-14 bg-slate-900 rounded-full flex items-center justify-center text-3xl shadow-inner border border-white/5 text-left shrink-0">🏦</div>
+                                                        <div className="flex flex-col items-start gap-1.5">
+                                                            <span className="font-black text-xl tracking-tight text-left">{acc}</span>
+                                                            {(settings.excludedFromGoal || []).includes(acc) ? (
+                                                                <span className="text-[10px] font-bold bg-rose-500/15 text-rose-400 px-2.5 py-0.5 rounded-md">시드머니 합산 제외됨</span>
+                                                            ) : (
+                                                                <span className="text-[10px] font-bold bg-teal-500/15 text-teal-400 px-2.5 py-0.5 rounded-md">시드머니 합산 중</span>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                    <span className="text-2xl font-black text-teal-400 font-sans text-right">{new Intl.NumberFormat('ko-KR').format(accountBalances[acc]||0)}원</span>
+                                                    <span className="text-2xl font-black text-teal-400 font-sans text-right shrink-0">{new Intl.NumberFormat('ko-KR').format(accountBalances[acc]||0)}원</span>
                                                 </div>
-                                                <div className="flex justify-end gap-5 mt-2 border-t border-slate-700/50 pt-6 text-[13px] font-black uppercase tracking-widest text-right">
-                                                    <button onClick={() => { setEditingBalanceAccount(acc); setEditAccountBalance(accountBalances[acc]||0); }} className="text-teal-300 flex items-center gap-1.5"><LucideIcon name="coins" className="w-4 h-4"/> 잔액</button>
-                                                    <button onClick={() => { setEditingAccount(acc); setEditAccountName(acc); }} className="text-slate-400 flex items-center gap-1.5"><LucideIcon name="edit-3" className="w-4 h-4"/> 이름</button>
-                                                    <button onClick={() => { if(confirm("정말 삭제할까멍?")) setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...settings, assetAccounts: settings.assetAccounts.filter(a => a !== acc) }, { merge: true }); }} className="text-rose-500 flex items-center gap-1.5"><LucideIcon name="trash-2" className="w-4 h-4"/> 삭제</button>
+                                                <div className="flex justify-between items-center mt-5 border-t border-slate-700/50 pt-5 text-[13px] font-black uppercase tracking-widest text-right">
+                                                    <button onClick={() => {
+                                                        const currentExcluded = settings.excludedFromGoal || [];
+                                                        const isExcluded = currentExcluded.includes(acc);
+                                                        const newExcluded = isExcluded ? currentExcluded.filter(n => n !== acc) : [...currentExcluded, acc];
+                                                        setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...settings, excludedFromGoal: newExcluded }, { merge: true });
+                                                        showMochaNotification(isExcluded ? "시드머니에 포함시켰다멍! 📈" : "시드머니에서 제외했다멍! 📉");
+                                                    }} className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl transition-all ${!(settings.excludedFromGoal || []).includes(acc) ? 'bg-teal-500/10 text-teal-400' : 'bg-slate-800 text-slate-400'}`}>
+                                                        <LucideIcon name={!(settings.excludedFromGoal || []).includes(acc) ? "check-circle-2" : "circle"} className="w-4 h-4"/> 목표 반영
+                                                    </button>
+                                                    <div className="flex gap-5">
+                                                        <button onClick={() => { setEditingAccount(acc); setEditAccountName(acc); }} className="text-slate-400 flex items-center gap-1.5"><LucideIcon name="edit-3" className="w-4 h-4"/> 수정</button>
+                                                        <button onClick={() => { if(confirm("정말 삭제할까멍?")) {
+                                                            const updated = settings.assetAccounts.filter(a => a !== acc);
+                                                            const updatedExcluded = (settings.excludedFromGoal || []).filter(a => a !== acc);
+                                                            setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...settings, assetAccounts: updated, excludedFromGoal: updatedExcluded }, { merge: true });
+                                                        } }} className="text-rose-500 flex items-center gap-1.5"><LucideIcon name="trash-2" className="w-4 h-4"/> 삭제</button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
@@ -611,54 +612,54 @@
                     {isBudgetManageOpen && (
                         <div className="fixed inset-0 z-[140] bg-slate-900/95 backdrop-blur-sm flex items-center justify-center p-4 pt-safe animate-fade-in text-left text-slate-100">
                             <div className="bg-slate-800 border border-slate-700 p-8 rounded-[48px] shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col">
-                                <div className="flex justify-between items-center mb-8 shrink-0">
+                                <div className="flex justify-between items-center mb-8 shrink-0 text-left">
                                     <h3 className="font-black text-2xl flex items-center gap-3">🛡️ 예산 방어 설정</h3>
                                     <button onClick={() => setIsBudgetManageOpen(false)} className="text-slate-400 p-2 active:scale-90"><LucideIcon name="x" className="w-8 h-8" /></button>
                                 </div>
-                                <div className="overflow-y-auto flex-1 space-y-5 pb-4 pr-1 hide-scrollbar">
+                                <div className="overflow-y-auto flex-1 space-y-5 pb-4 pr-1 hide-scrollbar text-left">
                                     {budgetForm.map(b => (
-                                        <div key={b.id} className="bg-slate-900 p-6 rounded-[36px] border border-slate-700 flex flex-col gap-5 relative shadow-inner">
-                                            <button onClick={() => setBudgetForm(budgetForm.filter(x => x.id !== b.id))} className="absolute top-6 right-6 text-slate-700 hover:text-rose-500 p-2"><LucideIcon name="trash-2" className="w-5 h-5" /></button>
-                                            <div className="flex gap-4 w-[85%]">
-                                                <input type="text" value={b.icon} onChange={e => setBudgetForm(budgetForm.map(x => x.id === b.id ? {...x, icon: e.target.value} : x))} className="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-600 text-center text-3xl outline-none" />
-                                                <input type="text" value={b.category} onChange={e => setBudgetForm(budgetForm.map(x => x.id === b.id ? {...x, category: e.target.value} : x))} className="flex-1 h-16 px-6 rounded-2xl bg-slate-800 border border-slate-600 text-white font-black text-lg outline-none" />
+                                        <div key={b.id} className="bg-slate-900 p-6 rounded-[36px] border border-slate-700 flex flex-col gap-5 relative shadow-inner text-left">
+                                            <button onClick={() => setBudgetForm(budgetForm.filter(x => x.id !== b.id))} className="absolute top-6 right-6 text-slate-700 hover:text-rose-500 p-2 text-left"><LucideIcon name="trash-2" className="w-5 h-5" /></button>
+                                            <div className="flex gap-4 w-[85%] text-left">
+                                                <input type="text" value={b.icon} onChange={e => setBudgetForm(budgetForm.map(x => x.id === b.id ? {...x, icon: e.target.value} : x))} className="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-600 text-center text-3xl outline-none text-left" />
+                                                <input type="text" value={b.category} onChange={e => setBudgetForm(budgetForm.map(x => x.id === b.id ? {...x, category: e.target.value} : x))} className="flex-1 h-16 px-6 rounded-2xl bg-slate-800 border border-slate-600 text-white font-black text-lg outline-none text-left" />
                                             </div>
-                                            <div className="flex items-center gap-4">
-                                                <span className="text-xs font-black text-slate-500 uppercase tracking-tighter font-sans">목표액</span>
-                                                <input type="number" value={b.amount} onChange={e => setBudgetForm(budgetForm.map(x => x.id === b.id ? {...x, amount: Number(e.target.value)} : x))} className="w-full h-16 px-6 rounded-2xl bg-slate-800 border border-slate-600 text-teal-400 font-black text-right text-xl outline-none" />
+                                            <div className="flex items-center gap-4 text-left text-left">
+                                                <span className="text-xs font-black text-slate-500 uppercase tracking-tighter font-sans text-left">목표액</span>
+                                                <input type="number" value={b.amount} onChange={e => setBudgetForm(budgetForm.map(x => x.id === b.id ? {...x, amount: Number(e.target.value)} : x))} className="w-full h-16 px-6 rounded-2xl bg-slate-800 border border-slate-600 text-teal-400 font-black text-right text-xl outline-none text-right" />
                                             </div>
                                         </div>
                                     ))}
-                                    <button onClick={() => setBudgetForm([...budgetForm, { id: Date.now(), category: '새 항목', amount: 100000, icon: '💡' }])} className="w-full h-20 rounded-[36px] border-2 border-dashed border-slate-700 text-slate-500 font-black flex items-center justify-center gap-3 hover:border-teal-500 hover:text-teal-400 transition-all mt-2 active:scale-[0.98]">
+                                    <button onClick={() => setBudgetForm([...budgetForm, { id: Date.now(), category: '새 항목', amount: 100000, icon: '💡' }])} className="w-full h-20 rounded-[36px] border-2 border-dashed border-slate-700 text-slate-500 font-black flex items-center justify-center gap-3 hover:border-teal-500 hover:text-teal-400 transition-all mt-2 active:scale-[0.98] text-left">
                                         <LucideIcon name="plus" className="w-6 h-6" /> 새 예산 항목 추가
                                     </button>
                                 </div>
-                                <button onClick={handleSaveBudgets} className="w-full bg-teal-500 text-white font-black text-xl py-6 h-18 rounded-[36px] mt-6 shadow-2xl active:scale-[0.98] transition-transform uppercase tracking-widest">저장하기 🐾</button>
+                                <button onClick={handleSaveBudgets} className="w-full bg-teal-500 text-white font-black text-xl py-6 h-18 rounded-[36px] mt-6 shadow-2xl active:scale-[0.98] transition-transform uppercase tracking-widest text-left">저장하기 🐾</button>
                             </div>
                         </div>
                     )}
 
                     {/* 목표 설정 모달 */}
                     {isGoalModalOpen && (
-                        <div className="fixed inset-0 z-[150] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in text-left text-slate-100">
-                            <div className="bg-slate-800 border border-slate-700 p-10 rounded-[54px] shadow-2xl w-full max-w-sm">
-                                <h3 className="font-black text-3xl mb-10 tracking-tight text-shadow text-left">🎯 목표 수정하기</h3>
-                                <form onSubmit={(e) => { e.preventDefault(); setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...settings, goal: settings.goal }, { merge: true }); setIsGoalModalOpen(false); showMochaNotification("각오 완료! 🔥"); }} className="space-y-8">
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-black text-slate-500 block uppercase tracking-widest ml-2">목표 내용</label>
-                                        <input type="text" value={settings.goal.title} onChange={e => setSettings({...settings, goal: {...settings.goal, title: e.target.value}})} className="w-full p-5 h-16 rounded-3xl bg-slate-900 border border-slate-600 text-white outline-none focus:border-teal-500 text-lg font-bold shadow-inner" required />
+                        <div className="fixed inset-0 z-[150] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in text-left text-slate-100 text-left">
+                            <div className="bg-slate-800 border border-slate-700 p-10 rounded-[54px] shadow-2xl w-full max-w-sm text-slate-100 text-left text-left">
+                                <h3 className="font-black text-3xl mb-10 tracking-tight text-shadow text-left text-left">🎯 목표 수정하기</h3>
+                                <form onSubmit={(e) => { e.preventDefault(); setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...settings, goal: settings.goal }, { merge: true }); setIsGoalModalOpen(false); showMochaNotification("새로운 각오 완료! 🔥"); }} className="space-y-8 text-left text-left">
+                                    <div className="space-y-2 text-left text-left text-left">
+                                        <label className="text-xs font-black text-slate-500 block uppercase tracking-widest ml-2 text-left">목표 내용</label>
+                                        <input type="text" value={settings.goal.title} onChange={e => setSettings({...settings, goal: {...settings.goal, title: e.target.value}})} className="w-full p-5 h-16 rounded-3xl bg-slate-900 border border-slate-600 text-white outline-none focus:border-teal-500 text-lg font-bold shadow-inner text-left" required />
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-black text-slate-500 block uppercase tracking-widest ml-2">목표 금액</label>
-                                        <input type="number" value={settings.goal.amount} onChange={e => setSettings({...settings, goal: {...settings.goal, amount: Number(e.target.value)}})} className="w-full p-5 h-16 rounded-3xl bg-slate-900 border border-slate-600 text-white outline-none font-black text-2xl focus:border-teal-500 shadow-inner font-sans" required />
+                                    <div className="space-y-2 text-left text-left">
+                                        <label className="text-xs font-black text-slate-500 block uppercase tracking-widest ml-2 text-left">목표 금액</label>
+                                        <input type="number" value={settings.goal.amount} onChange={e => setSettings({...settings, goal: {...settings.goal, amount: Number(e.target.value)}})} className="w-full p-5 h-16 rounded-3xl bg-slate-900 border border-slate-600 text-white outline-none font-black text-2xl focus:border-teal-500 shadow-inner font-sans text-left" required />
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-black text-slate-500 block uppercase tracking-widest ml-2">달성 기한</label>
-                                        <input type="date" value={settings.goal.deadline} onChange={e => setSettings({...settings, goal: {...settings.goal, deadline: e.target.value}})} className="w-full p-5 h-16 rounded-3xl bg-slate-900 border border-slate-600 text-white outline-none font-black focus:border-teal-500 font-sans shadow-inner" required />
+                                    <div className="space-y-2 text-left text-left text-left">
+                                        <label className="text-xs font-black text-slate-500 block uppercase tracking-widest ml-2 text-left text-left">달성 기한</label>
+                                        <input type="date" value={settings.goal.deadline} onChange={e => setSettings({...settings, goal: {...settings.goal, deadline: e.target.value}})} className="w-full p-5 h-16 rounded-3xl bg-slate-900 border border-slate-600 text-white outline-none font-black focus:border-teal-500 font-sans shadow-inner text-left" required />
                                     </div>
-                                    <div className="flex gap-4 pt-4">
-                                        <button type="button" onClick={() => setIsGoalModalOpen(false)} className="flex-1 py-5 bg-slate-700 rounded-3xl font-black active:scale-95 transition-all text-slate-300">취소</button>
-                                        <button type="submit" className="flex-[2] py-5 bg-teal-500 text-white rounded-3xl font-black text-xl shadow-2xl active:scale-95 transition-all">저장</button>
+                                    <div className="flex gap-4 pt-4 text-left text-left">
+                                        <button type="button" onClick={() => setIsGoalModalOpen(false)} className="flex-1 py-5 bg-slate-700 rounded-3xl font-black active:scale-95 transition-all text-slate-300 text-left">취소</button>
+                                        <button type="submit" className="flex-[2] py-5 bg-teal-500 text-white rounded-3xl font-black text-xl shadow-2xl active:scale-95 transition-all text-center text-center">저장</button>
                                     </div>
                                 </form>
                             </div>
@@ -667,30 +668,30 @@
 
                     {/* 기록 수정 모달 */}
                     {editTx && (
-                        <div className="fixed inset-0 z-[110] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in text-left text-slate-100">
-                            <div className="bg-slate-800 border border-slate-700 p-8 rounded-[48px] shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto flex flex-col">
-                                <div className="flex justify-between items-center mb-8"><h3 className="font-black text-2xl tracking-tight">기록 수정 ✍️</h3><button onClick={() => setEditTx(null)} className="text-slate-400 p-2"><LucideIcon name="x" className="w-8 h-8" /></button></div>
+                        <div className="fixed inset-0 z-[110] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in text-left text-slate-100 text-left">
+                            <div className="bg-slate-800 border border-slate-700 p-8 rounded-[48px] shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto flex flex-col text-slate-100 text-left text-left text-left">
+                                <div className="flex justify-between items-center mb-8 text-left text-left text-left"><h3 className="font-black text-2xl tracking-tight text-left text-left">기록 수정 ✍️</h3><button onClick={() => setEditTx(null)} className="text-slate-400 p-2 text-left"><LucideIcon name="x" className="w-8 h-8" /></button></div>
                                 <form onSubmit={async (e) => {
                                     e.preventDefault();
                                     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ledger', editTx.id), { ...editTx, amount: Number(editTx.amount) });
                                     setEditTx(null); showMochaNotification("수정 성공! 🐾");
-                                }} className="space-y-6">
-                                    <div className="flex bg-slate-900 p-1.5 rounded-3xl border border-slate-700 shadow-inner">
-                                        <button type="button" onClick={() => setEditTx({...editTx, type: 'expense'})} className={`flex-1 py-4.5 rounded-[22px] text-lg font-black ${editTx.type === 'expense' ? 'bg-rose-500 text-white shadow-xl' : 'text-slate-500'}`}>지출</button>
-                                        <button type="button" onClick={() => setEditTx({...editTx, type: 'income'})} className={`flex-1 py-4.5 rounded-[22px] text-lg font-black ${editTx.type === 'income' ? 'bg-sky-500 text-white shadow-xl' : 'text-slate-500'}`}>수입</button>
+                                }} className="space-y-6 text-left">
+                                    <div className="flex bg-slate-900 p-1.5 rounded-3xl border border-slate-700 shadow-inner text-left text-left text-left">
+                                        <button type="button" onClick={() => setEditTx({...editTx, type: 'expense'})} className={`flex-1 py-4.5 rounded-[22px] text-lg font-black ${editTx.type === 'expense' ? 'bg-rose-500 text-white shadow-xl' : 'text-slate-500'} text-left text-left`}>지출</button>
+                                        <button type="button" onClick={() => setEditTx({...editTx, type: 'income'})} className={`flex-1 py-4.5 rounded-[22px] text-lg font-black ${editTx.type === 'income' ? 'bg-sky-500 text-white shadow-xl' : 'text-slate-500'} text-left text-left`}>수입</button>
                                     </div>
-                                    <select value={editTx.account} onChange={e => setEditTx({...editTx, account: e.target.value})} className="w-full p-4.5 h-16 rounded-3xl bg-slate-900 border border-slate-700 text-white outline-none font-bold">
+                                    <select value={editTx.account} onChange={e => setEditTx({...editTx, account: e.target.value})} className="w-full p-4.5 h-16 rounded-3xl bg-slate-900 border border-slate-700 text-white outline-none font-bold text-left text-left text-left">
                                         {settings.assetAccounts.map(acc => <option key={acc} value={acc}>{acc}</option>)}
                                     </select>
-                                    <input type="number" value={editTx.amount} onChange={e => setEditTx({...editTx, amount: e.target.value})} className="w-full px-7 py-5 h-17 rounded-3xl bg-slate-900 border border-slate-700 text-white outline-none text-2xl font-black" required />
-                                    <input type="text" value={editTx.memo} onChange={e => setEditTx({...editTx, memo: e.target.value})} className="w-full px-7 py-4.5 h-16 rounded-3xl bg-slate-900 border border-slate-700 text-white outline-none font-bold" required />
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <select value={editTx.category} onChange={e => setEditTx({...editTx, category: e.target.value})} className="px-7 py-4.5 h-16 rounded-3xl bg-slate-900 border border-slate-700 text-white outline-none font-bold">{(editTx.type === 'income' ? incomeCategories : expenseCategories).map(cat => <option key={cat} value={cat}>{cat}</option>)}</select>
-                                        <input type="date" value={editTx.date} onChange={e => setEditTx({...editTx, date: e.target.value})} className="px-7 py-4.5 h-16 rounded-3xl bg-slate-900 border border-slate-700 text-white outline-none font-bold" required />
+                                    <input type="number" value={editTx.amount} onChange={e => setEditTx({...editTx, amount: e.target.value})} className="w-full px-7 py-5 h-17 rounded-3xl bg-slate-900 border border-slate-700 text-white outline-none text-2xl font-black text-left text-left" required />
+                                    <input type="text" value={editTx.memo} onChange={e => setEditTx({...editTx, memo: e.target.value})} className="w-full px-7 py-4.5 h-16 rounded-3xl bg-slate-900 border border-slate-700 text-white outline-none font-bold text-left text-left text-left" required />
+                                    <div className="grid grid-cols-2 gap-4 text-left text-left">
+                                        <select value={editTx.category} onChange={e => setEditTx({...editTx, category: e.target.value})} className="px-7 py-4.5 h-16 rounded-3xl bg-slate-900 border border-slate-700 text-white outline-none font-bold text-left text-left">{(editTx.type === 'income' ? incomeCategories : expenseCategories).map(cat => <option key={cat} value={cat}>{cat}</option>)}</select>
+                                        <input type="date" value={editTx.date} onChange={e => setEditTx({...editTx, date: e.target.value})} className="px-7 py-4.5 h-16 rounded-3xl bg-slate-900 border border-slate-700 text-white outline-none font-bold text-left text-left text-left" required />
                                     </div>
-                                    <div className="flex gap-4 mt-8">
-                                        <button type="button" onClick={async () => { if(confirm("정말 삭제할까멍?")) { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ledger', editTx.id)); setEditTx(null); } }} className="py-4.5 px-7 bg-rose-500/15 text-rose-400 rounded-3xl font-black active:scale-[0.9] transition-all flex items-center justify-center border border-rose-500/20"><LucideIcon name="trash-2" className="w-7 h-7" /></button>
-                                        <button type="submit" className="flex-1 py-4.5 bg-teal-500 text-white rounded-3xl font-black text-xl shadow-2xl active:scale-[0.97] transition-all">수정 완료</button>
+                                    <div className="flex gap-4 mt-8 text-left text-left text-left text-left text-left">
+                                        <button type="button" onClick={async () => { if(confirm("정말 삭제할까멍?")) { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ledger', editTx.id)); setEditTx(null); } }} className="py-4.5 px-7 bg-rose-500/15 text-rose-400 rounded-3xl font-black active:scale-[0.9] transition-all flex items-center justify-center border border-rose-500/20 text-left text-left text-left text-left"><LucideIcon name="trash-2" className="w-7 h-7" /></button>
+                                        <button type="submit" className="flex-1 py-4.5 bg-teal-500 text-white rounded-3xl font-black text-xl shadow-2xl active:scale-[0.97] transition-all text-left text-center text-center">수정 완료</button>
                                     </div>
                                 </form>
                             </div>
@@ -699,14 +700,14 @@
 
                     {/* 즐겨찾기 편집 모달 */}
                     {isFavManageOpen && (
-                        <div className="fixed inset-0 z-[130] bg-slate-900 overflow-y-auto p-6 pt-12 animate-fade-in text-left text-slate-100">
-                            <button onClick={() => setIsFavManageOpen(false)} className="mb-8 flex items-center gap-2 text-teal-400 font-black py-2 active:scale-95"><LucideIcon name="arrow-left" className="w-6 h-6" /> 돌아가기</button>
-                            <h2 className="text-3xl font-black mb-10 tracking-tight">자주 쓰는 내역 💖</h2>
-                            <div className="space-y-5 pb-24 text-left">
-                                {favorites.length === 0 ? <div className="text-center py-24 text-slate-600 font-black text-xl">아직 등록된 내역이 없다멍!</div> : favorites.map(fav => (
-                                    <div key={fav.id} className="p-7 glass border-slate-700 rounded-[44px] flex justify-between items-center shadow-2xl">
-                                        <div className="flex-1 text-left text-left text-left"><p className="text-[11px] font-black text-teal-400 uppercase tracking-widest mb-2 bg-teal-400/15 px-3 py-0.5 rounded-full w-fit text-left">{fav.category}</p><p className="font-black text-2xl text-slate-100 mb-1 text-left">{fav.memo}</p><p className="text-[16px] font-bold text-slate-500 font-sans text-left">{new Intl.NumberFormat('ko-KR').format(fav.amount)}원</p></div>
-                                        <button onClick={async () => { if(confirm("지울까멍?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'favorites', fav.id)); }} className="p-5 bg-rose-500/15 text-rose-400 rounded-2xl active:scale-90 transition-all border border-rose-500/10 text-right"><LucideIcon name="trash-2" className="w-7 h-7" /></button>
+                        <div className="fixed inset-0 z-[130] bg-slate-900 overflow-y-auto p-6 pt-12 animate-fade-in text-left text-slate-100 text-left text-left">
+                            <button onClick={() => setIsFavManageOpen(false)} className="mb-8 flex items-center gap-2 text-teal-400 font-black py-2 active:scale-95 text-left text-left text-left text-left"><LucideIcon name="arrow-left" className="w-6 h-6" /> 돌아가기</button>
+                            <h2 className="text-3xl font-black mb-10 tracking-tight text-left text-left text-left text-left text-left text-left">자주 쓰는 내역 💖</h2>
+                            <div className="space-y-5 pb-24 text-left text-left text-left text-left">
+                                {favorites.length === 0 ? <div className="text-center py-24 text-slate-600 font-black text-xl text-left text-left text-left text-left text-left">아직 등록된 내역이 없다멍!</div> : favorites.map(fav => (
+                                    <div key={fav.id} className="p-7 glass border-slate-700 rounded-[44px] flex justify-between items-center shadow-2xl text-left text-left text-left text-left text-left">
+                                        <div className="flex-1 text-left text-left text-left text-left text-left text-left text-left text-left text-left"><p className="text-[11px] font-black text-teal-400 uppercase tracking-widest mb-2 bg-teal-400/15 px-3 py-0.5 rounded-full w-fit text-left text-left">{fav.category}</p><p className="font-black text-2xl text-slate-100 mb-1 text-left text-left">{fav.memo}</p><p className="text-[16px] font-bold text-slate-500 font-sans text-left text-left">{new Intl.NumberFormat('ko-KR').format(fav.amount)}원</p></div>
+                                        <button onClick={async () => { if(confirm("지울까멍?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'favorites', fav.id)); }} className="p-5 bg-rose-500/15 text-rose-400 rounded-2xl active:scale-90 transition-all border border-rose-500/10 text-right text-right text-right text-right text-right text-right"><LucideIcon name="trash-2" className="w-7 h-7" /></button>
                                     </div>
                                 ))}
                             </div>
