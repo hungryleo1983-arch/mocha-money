@@ -163,6 +163,8 @@
             const [newAccountName, setNewAccountName] = useState('');
             const [editingAccount, setEditingAccount] = useState(null);
             const [editAccountName, setEditAccountName] = useState('');
+            const [editingBalanceAccount, setEditingBalanceAccount] = useState(null);
+            const [editAccountBalance, setEditAccountBalance] = useState('');
             const [budgetForm, setBudgetForm] = useState([]);
 
             const [mochaPopup, setMochaPopup] = useState({ show: false, message: '', type: 'info' });
@@ -290,7 +292,7 @@
                 showMochaNotification("방어 태세 완벽 구축! 🛡️");
             };
 
-            useEffect(() => { if (window.lucide) lucide.createIcons(); }, [activeTab, loading, isAssetPageOpen, isFavManageOpen, isGoalModalOpen, isBudgetManageOpen, editTx, chartData, editingAccount, budgetForm, isNavVisible]);
+            useEffect(() => { if (window.lucide) lucide.createIcons(); }, [activeTab, loading, isAssetPageOpen, isFavManageOpen, isGoalModalOpen, isBudgetManageOpen, editTx, chartData, editingAccount, editingBalanceAccount, budgetForm, isNavVisible]);
 
             if (loading) return (
                 <div className="flex flex-col items-center justify-center h-screen bg-slate-900 gap-6 text-teal-400 font-black">
@@ -557,6 +559,31 @@
                                                     setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...settings, assetAccounts: updated }, { merge: true });
                                                     setEditingAccount(null);
                                                 }} className="bg-teal-500 text-white p-5 rounded-2xl shadow-lg text-left"><LucideIcon name="check" /></button>
+                                                <button onClick={() => setEditingAccount(null)} className="bg-slate-600 text-white p-5 rounded-2xl shadow-lg text-left"><LucideIcon name="x" /></button>
+                                            </div>
+                                        ) : editingBalanceAccount === acc ? (
+                                            <div className="flex gap-2 text-left">
+                                                <input type="number" value={editAccountBalance} onChange={e => setEditAccountBalance(e.target.value)} className="flex-1 p-4 rounded-2xl bg-slate-900 border border-teal-500 text-white outline-none font-bold text-left" autoFocus />
+                                                <button onClick={async () => {
+                                                    const currentBal = accountBalances[acc] || 0;
+                                                    const newBal = Number(editAccountBalance);
+                                                    if (newBal !== currentBal) {
+                                                        const diff = newBal - currentBal;
+                                                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'ledger'), {
+                                                            type: diff > 0 ? 'income' : 'expense',
+                                                            amount: Math.abs(diff),
+                                                            category: '기타',
+                                                            memo: '잔액 조정',
+                                                            date: new Date().toISOString().split('T')[0],
+                                                            account: acc,
+                                                            timestamp: new Date().toISOString(),
+                                                            uid: user.uid
+                                                        });
+                                                        showMochaNotification("통장 잔액이 수정되었다멍! 💰");
+                                                    }
+                                                    setEditingBalanceAccount(null);
+                                                }} className="bg-teal-500 text-white p-5 rounded-2xl shadow-lg text-left"><LucideIcon name="check" /></button>
+                                                <button onClick={() => setEditingBalanceAccount(null)} className="bg-slate-600 text-white p-5 rounded-2xl shadow-lg text-left"><LucideIcon name="x" /></button>
                                             </div>
                                         ) : (
                                             <div className="text-left">
@@ -567,9 +594,10 @@
                                                     </div>
                                                     <span className="text-2xl font-black text-teal-400 font-sans text-right">{new Intl.NumberFormat('ko-KR').format(accountBalances[acc]||0)}원</span>
                                                 </div>
-                                                <div className="flex justify-end gap-7 mt-2 border-t border-slate-700/50 pt-6 text-[13px] font-black uppercase tracking-widest text-right">
-                                                    <button onClick={() => { setEditingAccount(acc); setEditAccountName(acc); }} className="text-slate-400 flex items-center gap-2"><LucideIcon name="edit-3" className="w-4 h-4"/> 수정</button>
-                                                    <button onClick={() => { if(confirm("정말 삭제할까멍?")) setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...settings, assetAccounts: settings.assetAccounts.filter(a => a !== acc) }, { merge: true }); }} className="text-rose-500 flex items-center gap-2"><LucideIcon name="trash-2" className="w-4 h-4"/> 삭제</button>
+                                                <div className="flex justify-end gap-5 mt-2 border-t border-slate-700/50 pt-6 text-[13px] font-black uppercase tracking-widest text-right">
+                                                    <button onClick={() => { setEditingBalanceAccount(acc); setEditAccountBalance(accountBalances[acc]||0); }} className="text-teal-300 flex items-center gap-1.5"><LucideIcon name="coins" className="w-4 h-4"/> 잔액</button>
+                                                    <button onClick={() => { setEditingAccount(acc); setEditAccountName(acc); }} className="text-slate-400 flex items-center gap-1.5"><LucideIcon name="edit-3" className="w-4 h-4"/> 이름</button>
+                                                    <button onClick={() => { if(confirm("정말 삭제할까멍?")) setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global'), { ...settings, assetAccounts: settings.assetAccounts.filter(a => a !== acc) }, { merge: true }); }} className="text-rose-500 flex items-center gap-1.5"><LucideIcon name="trash-2" className="w-4 h-4"/> 삭제</button>
                                                 </div>
                                             </div>
                                         )}
