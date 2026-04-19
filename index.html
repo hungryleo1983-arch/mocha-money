@@ -56,8 +56,9 @@
             appId: "1:421934031399:web:6c222b3f3288bf06d72402"
         };
             
-        // 💡 [중요] 깃허브에 코드를 올리실 때는 이 따옴표 안에 발급받으신 키를 꼭 넣어주셔야 합니다!
-        const apiKey = "AIzaSyAb_-T47fzJtRlNOGVdlASAUEjGWQceSLc";
+        // 🚨🚨🚨 [매우 중요] 깃허브에 코드를 올린 직후, 이 빈칸을 본인의 키로 꼭 채워주세요!!! 🚨🚨🚨
+        // 수정 예시: const apiKey = "AIzaSyAb_-T47fzJtRlNOGVdlASAUEjGWQceSLc";
+        const apiKey = "AIzaSyAb_-T47fzJtRlNOGVdlASAUEjGWQceSLc"; 
         
         const appId = typeof __app_id !== 'undefined' ? __app_id : "mocha-money-app";
 
@@ -356,7 +357,6 @@
                 }
             };
 
-            // 💡 [오류 원인 노출] AI 기술 오류 시 구체적인 이유를 상단 배너에 출력하도록 변경
             const handleFileUpload = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -367,7 +367,13 @@
                 setTimeout(async () => {
                     try {
                         const base64Data = await compressImage(file);
-                        const modelName = apiKey === "" ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
+                        
+                        // 💡 API 키가 비어있으면 오류를 내기 전에 확인
+                        if (!apiKey || apiKey.trim() === "") {
+                            throw new Error("HTTP_400"); // 강제로 400 에러 처리로 넘김
+                        }
+                        
+                        const modelName = "gemini-1.5-flash"; // 가장 안정적이고 권한 오류 없는 모델 강제 고정
 
                         const result = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
                             method: 'POST',
@@ -422,7 +428,6 @@
                     } catch (e) {
                         console.error("영수증 분석 에러 상세 내용:", e);
                         
-                        // 💡 오류의 진짜 원인을 분석하여 텍스트로 만듦
                         let errorMessage = e.message || String(e);
                         if (e.status) {
                             errorMessage = `통신 거부 (상태코드: ${e.status}) - ${errorMessage}`;
@@ -430,10 +435,13 @@
                             errorMessage = `데이터 파싱 실패 (JSON 문법 오류)`;
                         }
 
-                        // 화면 상단 에러 배너에 구체적인 오류 이유 출력
-                        setError(`[영수증 자동 입력 실패] 원인: ${errorMessage}`);
-                        
-                        showMochaNotification(`영수증 분석에 실패했다멍! 화면 상단의 에러 원인을 확인하라개! 😢`, "warning");
+                        if (errorMessage === "HTTP_400") {
+                            setError(`[영수증 인식 실패] API 키가 비어있습니다. 깃허브에서 코드를 열어 apiKey 부분을 채워주세요.`);
+                            showMochaNotification(`API 키가 빠져있다멍! 상단 안내를 확인하라개! 💡`, "warning");
+                        } else {
+                            setError(`[영수증 자동 입력 실패] 원인: ${errorMessage}`);
+                            showMochaNotification(`영수증 분석에 실패했다멍! 화면 상단의 에러 원인을 확인하라개! 😢`, "warning");
+                        }
                     } finally {
                         setIsUploading(false); 
                         if(fileInputRef.current) fileInputRef.current.value = '';
